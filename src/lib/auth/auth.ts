@@ -18,7 +18,7 @@ export const auth = betterAuth({
 
   trustedOrigins: [
     "http://localhost:3001",
-    "https://warehouse-system-1qxqkk06y-warehouse-system2.vercel.app",
+    "https://warehouse-system-app.vercel.app",
   ],
 
   database: drizzleAdapter(db, {
