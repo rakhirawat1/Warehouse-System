@@ -1,19 +1,109 @@
 services:
   db:
     image: postgres:16
-    container_name: warehouse-postgres-new
+    container_name: warehouse-postgres
     restart: unless-stopped
-
     environment:
+      POSTGRES_DB: warehouse_management
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: warehouse_management
-
     ports:
       - "5434:5432"
-
     volumes:
-      - warehouse_management_data:/var/lib/postgresql/data
+      - warehouse_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d warehouse_management"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runner
+      args:
+        GROQ_API_KEY: ${GROQ_API_KEY}
+        DATABASE_URL: postgresql://postgres:postgres@db:5432/warehouse_management
+    container_name: warehouse-app
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://postgres:postgres@db:5432/warehouse_management
+      BETTER_AUTH_URL: http://localhost:3001
+      NEXT_PUBLIC_APP_URL: http://localhost:3001
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET}
+      GROQ_API_KEY: ${GROQ_API_KEY}
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "3001:3001"
+
+  migration:
+    profiles: ["tools"]
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: migration
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@db:5432/warehouse_management
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET}
+    depends_on:
+      db:
+        condition: service_healthy
+
+  admin:
+    profiles: ["tools"]
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: migration
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@db:5432/warehouse_management
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET}
+    entrypoint:
+      - pnpm
+      - dlx
+      - auth@1.7.5
+      - create-admin
+      - --config
+      - src/lib/auth/auth.ts
+    depends_on:
+      db:
+        condition: service_healthy
+
+  seed:
+    profiles: ["tools"]
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: migration
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@db:5432/warehouse_management
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET}
+    entrypoint:
+      - node_modules/.bin/tsx
+      - src/db/seed.ts
+    depends_on:
+      db:
+        condition: service_healthy
+
+  clear:
+    profiles: ["tools"]
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: migration
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@db:5432/warehouse_management
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET}
+    entrypoint:
+      - node_modules/.bin/tsx
+      - src/db/clear.ts
+    depends_on:
+      db:
+        condition: service_healthy
 
 volumes:
-  warehouse_management_data:
+  warehouse_db_data:

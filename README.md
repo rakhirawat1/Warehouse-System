@@ -23,7 +23,7 @@ production.
 - **Tailwind CSS 4**, **Framer Motion**, **Recharts** and **Lucide** icons
 - **Groq** for the AI features
 - **pnpm** as the package manager
-- **Docker Compose** for the local database
+- **Docker Compose** for local PostgreSQL and optional full application containerization
 - **Vercel** for hosting and **Neon** for the production database
 
 ## Features
@@ -54,8 +54,62 @@ production.
 
 ## Setup
 
-For local installation, environment variables, database setup, migrations,
-seeding, and running the application, see [SETUP.md](./SETUP.md).
+The project supports both standard local development and full Docker
+execution. Docker is provided for reproducible local execution and PostgreSQL,
+and the project can also run the complete application inside Docker. Docker is
+not mandatory: Next.js can run directly with Node.js and pnpm, and PostgreSQL
+can run in Docker Compose or come from your own installation.
+
+| | Standard local development | Full Docker |
+| --- | --- | --- |
+| On the host | Node.js + pnpm + Next.js | Docker only |
+| In Docker | PostgreSQL | Next.js + PostgreSQL |
+| PostgreSQL address used by Next.js | `localhost:5434` | `db:5432` |
+| Application | http://localhost:3001 | http://localhost:3001 |
+
+**Standard local development** (Next.js on the host, PostgreSQL in Docker):
+
+```bash
+docker compose up -d
+pnpm install
+pnpm db:migrate
+pnpm create-admin
+pnpm dev
+```
+
+The host-side `DATABASE_URL` points at the port Docker exposes:
+`postgresql://postgres:postgres@localhost:5434/warehouse_management`.
+
+**Full Docker** (Next.js and PostgreSQL both in Docker):
+
+```bash
+docker compose up -d
+docker compose run --rm migration
+docker compose run --rm admin
+```
+
+`docker compose up -d` does not run migrations, create an administrator or
+load demo data; each of those is a separate command. Inside Docker the
+application reaches PostgreSQL through the service name `db` on the internal
+port: `postgresql://postgres:postgres@db:5432/warehouse_management`. `db:5432`
+works only between Docker containers; `localhost:5434` is for Next.js running
+directly on the host.
+
+**Optional demo data and clearing.** Demo data is never created automatically.
+
+| | Standard local development | Full Docker |
+| --- | --- | --- |
+| Load demo data | `pnpm db:seed` | `docker compose run --rm seed` |
+| Clear inventory data | `pnpm db:clear` | `docker compose run --rm clear` |
+
+Seeding replaces all inventory data (warehouses, storage spaces, items,
+allocations and movement history). Clearing deletes the same data without
+loading anything. User accounts are kept in both cases. Use them only on a
+local or test database.
+
+For prerequisites, environment variables, database setup, migrations,
+administrator creation, optional seed data, and detailed run instructions, see
+[SETUP.md](./SETUP.md).
 
 ## Data Model
 
@@ -96,7 +150,8 @@ Warehouse ──< Storage Space ──< Allocation >── Item
   | Secure | Secure only |
   | Hazardous | Hazardous only |
 
-- Storage spaces and items holding stock cannot be deleted.
+- Storage spaces holding stock, and items with units allocated to storage
+  spaces, cannot be deleted.
 
 Capacity, compatibility and quantity rules are enforced in the application and
 again by PostgreSQL triggers.
@@ -129,17 +184,26 @@ Beyond the core requirements, the project also implements:
 
 ## Environments
 
-The project uses separate configuration for local development and production:
+The project runs in three separate environments:
 
 ```
-Local development:  local .env                    →  Docker PostgreSQL
-Production:         Vercel Environment Variables  →  Neon PostgreSQL
+Local development:  Node.js + pnpm  →  Next.js  →  Docker PostgreSQL  (localhost:5434)
+Full Docker:        Docker          →  Next.js  →  Docker PostgreSQL  (db:5432)
+Production:         Vercel          →  Next.js  →  Neon PostgreSQL
 ```
 
-The local `.env` file is used only for local development and points to the
-local Docker PostgreSQL database. It is not replaced with production values.
-Production environment variables are configured in Vercel, so production
-credentials are never committed to the repository.
+- Next.js running directly on the host connects to Docker PostgreSQL through
+  `localhost:5434`.
+- Next.js running inside Docker connects to PostgreSQL through `db:5432`,
+  which is valid only between Docker containers.
+- Production runs on Vercel with Neon PostgreSQL. It does not use the local
+  Docker setup.
+- Local Docker PostgreSQL and production Neon PostgreSQL are completely
+  separate databases.
+
+The local `.env` file is used only for local development and never contains
+production credentials. Production environment variables are configured in
+Vercel, so production credentials are never committed to the repository.
 
 ## Deployment
 
@@ -178,16 +242,35 @@ Secret values are never stored in the repository or shown in this document.
 
 ### 5. Prepare the production database
 
-This is a one-time production database preparation step. Apply the Drizzle
-migrations to the production Neon database and create the initial
-administrator account:
+This is a one-time preparation of the production Neon database. It has two
+separate operations: applying the migrations, then creating the initial
+administrator. Both must run against the Neon database, not the local Docker
+database, and a Vercel deployment performs neither of them.
+
+**Apply the Drizzle migrations.** Run the migration with `DATABASE_URL` set to
+the production Neon connection string:
 
 ```bash
 pnpm db:migrate
 ```
 
-The command must run against the Neon database, not the local Docker database.
-The local `.env` file stays unchanged for local development.
+**Create the initial administrator.** This is a separate step. The application
+has no public sign-up and the migrated database contains no account, so create
+the administrator once:
+
+```bash
+pnpm create-admin
+```
+
+It prompts for the email, password and name, and reads the same
+`DATABASE_URL`, so it must also point at the Neon database. Do not store the
+credentials in the repository.
+
+To target Neon without editing the local `.env`, set `DATABASE_URL` to the Neon
+connection string only for that terminal session; a variable that is already
+set takes precedence over `.env`. The local `.env` stays unchanged for local
+development. The Docker service commands (`migration`, `admin`, `seed`,
+`clear`) are for local Docker only and are not used for production.
 
 > **Database schema changes:** Vercel deploys code changes automatically, but
 > it does not run Drizzle migrations. When the database schema changes,
@@ -200,8 +283,11 @@ Optionally, demo inventory data can be loaded with:
 pnpm db:seed
 ```
 
-This loads demo warehouses, storage spaces and items. It is not required for
-deployment and should only be used when demo data is appropriate.
+This loads demo warehouses, storage spaces and items. It is optional, is never
+run automatically, and needs an administrator to exist already. It replaces
+all existing inventory data (warehouses, storage spaces, items, allocations
+and movement history), so it must not be run against a production database
+that holds real data.
 
 ### 6. Deploy
 
@@ -216,10 +302,20 @@ automatically triggers a new Vercel deployment.
 
 ### Troubleshooting
 
+**Production (Vercel)**
+
 | Problem | Fix |
 | --- | --- |
 | Signing in fails, or it keeps returning to the login page | `BETTER_AUTH_URL` and `NEXT_PUBLIC_APP_URL` must be `https://warehouse-system-app.vercel.app` (`https`, no trailing slash). Correct them in Vercel and redeploy. |
-| Sign-in fails on a preview deployment | Expected. Authentication is configured for the production URL; preview URLs are not the primary login address. Use `https://warehouse-system-app.vercel.app`. |
+| There is no account to sign in with | The migrated database contains no accounts. Create the initial administrator (see step 5). |
 | Errors about a missing table or column | The production migrations have not been applied to Neon. Apply them (see step 5). |
 | The AI assistant answers with an error | `GROQ_API_KEY` is missing or invalid in Vercel. Correct it and redeploy. |
 | Changed an environment variable but nothing happened | Environment variable changes only apply to new deployments. Redeploy the project. |
+
+**Local**
+
+| Problem | Fix |
+| --- | --- |
+| Signing in fails locally | `BETTER_AUTH_URL` and `NEXT_PUBLIC_APP_URL` in `.env` must match the address in the browser, `http://localhost:3001`, port included. |
+| The application cannot reach the database | Next.js on the host uses `localhost:5434`; Next.js inside Docker uses `db:5432`. PostgreSQL must be running first (`docker compose up -d`). |
+| Errors about a missing table or column | The migrations have not been applied. Run `pnpm db:migrate`, or `docker compose run --rm migration` in full Docker. |

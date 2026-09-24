@@ -12,6 +12,7 @@ export const auth = betterAuth({
       "localhost:3001",
       "*.vercel.app",
     ],
+    fallback: "http://localhost:3001",
     protocol:
       process.env.NODE_ENV === "development" ? "http" : "https",
   },
