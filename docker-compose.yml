@@ -1,0 +1,19 @@
+services:
+  db:
+    image: postgres:16
+    container_name: warehouse-postgres-new
+    restart: unless-stopped
+
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: warehouse_management
+
+    ports:
+      - "5434:5432"
+
+    volumes:
+      - warehouse_management_data:/var/lib/postgresql/data
+
+volumes:
+  warehouse_management_data:

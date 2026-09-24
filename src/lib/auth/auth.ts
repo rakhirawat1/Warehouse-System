@@ -1,0 +1,57 @@
+import { betterAuth } from "better-auth";
+import { APIError } from "better-auth/api";
+import { drizzleAdapter } from "@better-auth/drizzle-adapter";
+import { admin as adminPlugin } from "better-auth/plugins";
+
+import { db } from "@/db";
+import { ac, admin, staff } from "@/lib/auth/permissions";
+
+export const auth = betterAuth({
+  database: drizzleAdapter(db, {
+    provider: "pg",
+  }),
+
+  emailAndPassword: {
+    enabled: true,
+  },
+
+  user: {
+    additionalFields: {
+      mustChangePassword: {
+        type: "boolean",
+        required: false,
+        defaultValue: false,
+        input: false,
+      },
+    },
+  },
+
+  databaseHooks: {
+    user: {
+      create: {
+        before: async (user, ctx) => {
+          if (ctx?.path === "/sign-up/email") {
+            throw new APIError("FORBIDDEN", {
+              message: "Public registration is disabled.",
+            });
+          }
+
+          return {
+            data: user,
+          };
+        },
+      },
+    },
+  },
+
+  plugins: [
+    adminPlugin({
+      ac,
+      roles: {
+        admin,
+        staff,
+      },
+      defaultRole: "staff",
+    }),
+  ],
+});

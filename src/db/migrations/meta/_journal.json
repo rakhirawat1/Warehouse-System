@@ -1,0 +1,104 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1789625365790,
+      "tag": "0000_messy_post",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1789626421531,
+      "tag": "0001_lonely_adam_destine",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1789626711968,
+      "tag": "0002_young_rockslide",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1789630016427,
+      "tag": "0003_good_sleeper",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1789805246285,
+      "tag": "0004_lame_mephistopheles",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1789918307184,
+      "tag": "0005_stock_movements_and_storage_rules",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1789918321294,
+      "tag": "0006_items_quantity_derived",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1789918336609,
+      "tag": "0007_integrity_triggers",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1789935129447,
+      "tag": "0008_item_total_quantity",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1789935139222,
+      "tag": "0009_quantity_integrity",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1789936674814,
+      "tag": "0010_item_sku",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1790013974085,
+      "tag": "0011_storage_space_unique_name",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1790016550380,
+      "tag": "0012_storage_space_description",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1790066986845,
+      "tag": "0013_many_hellfire_club",
+      "breakpoints": true
+    }
+  ]
+}

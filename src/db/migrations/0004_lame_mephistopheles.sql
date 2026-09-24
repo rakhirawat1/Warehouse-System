@@ -1,0 +1,1 @@
+ALTER TABLE "items" ADD CONSTRAINT "items_quantity_positive" CHECK ("items"."quantity" > 0);
