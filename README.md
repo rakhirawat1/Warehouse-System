@@ -7,6 +7,13 @@ the items they hold. It tracks capacity at warehouse and storage-space level,
 records where every unit is stored, and keeps a full history of stock
 movements, with separate permissions for administrators and staff.
 
+## Live Demo
+
+**Live Application:** [https://warehouse-system-app.vercel.app](https://warehouse-system-app.vercel.app)
+
+The application is hosted on Vercel and uses a Neon PostgreSQL database in
+production.
+
 ## Tech Stack
 
 - **Next.js 16** (App Router) with **React 19** and **TypeScript**
@@ -15,7 +22,9 @@ movements, with separate permissions for administrators and staff.
 - **Zod** for validation
 - **Tailwind CSS 4**, **Framer Motion**, **Recharts** and **Lucide** icons
 - **Groq** for the AI features
+- **pnpm** as the package manager
 - **Docker Compose** for the local database
+- **Vercel** for hosting and **Neon** for the production database
 
 ## Features
 
@@ -30,8 +39,9 @@ movements, with separate permissions for administrators and staff.
 - **Capacity tracking**: used and available capacity for every warehouse and
   storage space, with alerts for nearly full spaces.
 - **Authentication and roles**: email/password sign-in with Admin and Staff
-  roles. There is no public sign-up; administrators create accounts with a
-  temporary password that must be changed at first sign-in.
+  roles. There is no public sign-up; administrators create staff accounts with
+  a temporary password that must be changed at first sign-in. The initial
+  administrator was created during the production database setup.
 - **Activity log**: every allocation, move, correction and dispatch, with
   filters by type, warehouse, item, person and date.
 - **Dashboard**: key figures, capacity charts, items by allocation status and
@@ -44,8 +54,8 @@ movements, with separate permissions for administrators and staff.
 
 ## Setup
 
-For installation, environment variables, database setup, migrations, seeding,
-and running the application, see [SETUP.md](./SETUP.md).
+For local installation, environment variables, database setup, migrations,
+seeding, and running the application, see [SETUP.md](./SETUP.md).
 
 ## Data Model
 
@@ -117,121 +127,99 @@ Beyond the core requirements, the project also implements:
 - CSV inventory export
 - Database-level integrity triggers and row locking for concurrent requests
 
+## Environments
+
+The project uses separate configuration for local development and production:
+
+```
+Local development:  local .env                    →  Docker PostgreSQL
+Production:         Vercel Environment Variables  →  Neon PostgreSQL
+```
+
+The local `.env` file is used only for local development and points to the
+local Docker PostgreSQL database. It is not replaced with production values.
+Production environment variables are configured in Vercel, so production
+credentials are never committed to the repository.
+
 ## Deployment
 
-The app runs on [Vercel](https://vercel.com) with a hosted PostgreSQL database
-from [Neon](https://neon.tech). Both have free plans. You need a GitHub
-account, a copy of this repository in it, and Node.js and pnpm on your computer
-(see Quick start) to prepare the database.
+The application is deployed on Vercel with Neon PostgreSQL as the production
+database.
 
-### 1. Put the code on GitHub
+### 1. Push the project to GitHub
 
-Fork this repository, or push your own copy to a GitHub repository you own.
+Push the application source code to a GitHub repository.
 
-### 2. Create the Vercel project
+### 2. Create and connect the Vercel project
 
-1. Sign in at [vercel.com](https://vercel.com) with your GitHub account.
-2. Click **Add New** → **Project**, find your repository and click **Import**.
-3. Choose the **project name** carefully: the site will be at
-   `https://<project-name>.vercel.app`, and you need that address in step 4.
-4. Leave the framework (Next.js) and the build settings as they are. Do not
-   deploy yet; if Vercel starts a first deployment anyway, let it fail and
-   carry on.
+Import the GitHub repository into Vercel and configure the project as a
+Next.js application.
 
-### 3. Create the database
+### 3. Connect Neon PostgreSQL
 
-1. In the Vercel project, open the **Storage** tab, click **Create Database**
-   and choose **Neon** (Serverless Postgres).
-2. Pick a region close to you, create it, and connect it to the project.
-   Vercel adds the `DATABASE_URL` environment variable for you.
-3. Open the database page and copy the **pooled connection string**. It looks
-   like `postgresql://user:password@...neon.tech/neondb?sslmode=require`.
-   Keep it private; you need it in step 6.
+Connect a Neon PostgreSQL database to the Vercel project using the Neon
+integration. Vercel provides the production `DATABASE_URL` through the
+project's environment configuration.
 
-### 4. Add the environment variables
+### 4. Configure production environment variables
 
-In the Vercel project, open **Settings** → **Environment Variables** and add
-the following for the **Production** environment:
+Add the required production variables in Vercel (**Settings** →
+**Environment Variables**):
 
 | Name | Value |
-|---|---|
-| `BETTER_AUTH_SECRET` | A new long random string (see below). Never reuse the local one. |
-| `BETTER_AUTH_URL` | `https://<project-name>.vercel.app`, with no slash at the end |
-| `NEXT_PUBLIC_APP_URL` | The same address |
-| `GROQ_API_KEY` | A key from [console.groq.com/keys](https://console.groq.com/keys). The AI features fail without it. |
-| `ENABLE_EXPERIMENTAL_COREPACK` | `1`, so Vercel uses the pnpm version pinned in `package.json` |
+| --- | --- |
+| `DATABASE_URL` | Provided by the Neon integration |
+| `BETTER_AUTH_SECRET` | A private random string, set in Vercel only |
+| `BETTER_AUTH_URL` | `https://warehouse-system-app.vercel.app` |
+| `NEXT_PUBLIC_APP_URL` | `https://warehouse-system-app.vercel.app` |
+| `GROQ_API_KEY` | Groq API key for the AI features, set in Vercel only |
 
-`DATABASE_URL` is already there from step 3.
+Secret values are never stored in the repository or shown in this document.
 
-To generate the secret:
+### 5. Prepare the production database
 
-```bash
-# macOS / Linux
-openssl rand -base64 32
-```
-
-```powershell
-# Windows PowerShell
-[Convert]::ToBase64String((1..32 | ForEach-Object { Get-Random -Max 256 }))
-```
-
-### 5. Set the Node.js version
-
-Open **Settings** → **General** and set **Node.js Version** to **22.x** or
-newer. pnpm 11 does not run on older versions.
-
-### 6. Prepare the database
-
-This is done once, from your computer, in the project folder after
-`pnpm install`. Point `DATABASE_URL` at the Neon database for this terminal
-only, then create the tables and the first administrator:
-
-```bash
-# macOS / Linux
-export DATABASE_URL="postgresql://...neon.tech/neondb?sslmode=require"
-```
-
-```powershell
-# Windows PowerShell
-$env:DATABASE_URL = "postgresql://...neon.tech/neondb?sslmode=require"
-```
-
-Then, in the same terminal:
+This is a one-time production database preparation step. Apply the Drizzle
+migrations to the production Neon database and create the initial
+administrator account:
 
 ```bash
 pnpm db:migrate
-pnpm create-admin --email you@example.com --password "a-strong-password" --name "Your Name"
-pnpm db:seed    # optional: demo warehouses, storage spaces and items
 ```
 
-Close that terminal afterwards, so later commands do not run against the
-production database by mistake.
+The command must run against the Neon database, not the local Docker database.
+The local `.env` file stays unchanged for local development.
 
-### 7. Deploy
+> **Database schema changes:** Vercel deploys code changes automatically, but
+> it does not run Drizzle migrations. When the database schema changes,
+> generate a new Drizzle migration and apply it to the production Neon
+> database before using the updated schema in production.
 
-1. Open the **Deployments** tab, open the menu on the latest deployment and
-   click **Redeploy**, so it picks up the environment variables. (If there is
-   no deployment yet, push any commit to `main`.)
-2. When it finishes, open `https://<project-name>.vercel.app`.
+Optionally, demo inventory data can be loaded with:
 
-From now on, every push to `main` deploys automatically.
+```bash
+pnpm db:seed
+```
 
-### 8. Check that it works
+This loads demo warehouses, storage spaces and items. It is not required for
+deployment and should only be used when demo data is appropriate.
 
-1. Sign in with the administrator from step 6.
-2. Create a warehouse, a storage space and an item, then allocate some stock.
-3. Open the AI assistant and ask a question, such as "Which spaces are nearly
-   full?".
-4. On the **Users** page, add a staff account and sign in with it in a private
-   window to check the forced password change.
+### 6. Deploy
+
+Deploy or redeploy the Vercel project so it uses the configured environment
+variables, then verify the live application at
+[https://warehouse-system-app.vercel.app](https://warehouse-system-app.vercel.app).
+
+### 7. Future deployments
+
+After the initial deployment, every change pushed to the `main` branch
+automatically triggers a new Vercel deployment.
 
 ### Troubleshooting
 
 | Problem | Fix |
-|---|---|
-| Signing in fails, or it keeps returning to the login page | `BETTER_AUTH_URL` must match the address in the browser exactly: `https`, no slash at the end. Correct it and redeploy. |
-| Sign-in fails on a preview deployment | Expected. Preview addresses differ from `BETTER_AUTH_URL`; use the production address. |
-| Errors about a missing table or column | The migrations did not run against Neon. Repeat step 6. |
-| The build fails while installing | Check that `ENABLE_EXPERIMENTAL_COREPACK` is `1` and Node.js is 22.x or newer. |
-| The AI assistant answers with an error | `GROQ_API_KEY` is missing or invalid. Add it and redeploy. |
-| Changed a variable but nothing happened | Environment variables only apply to new deployments. Redeploy. |
+| --- | --- |
+| Signing in fails, or it keeps returning to the login page | `BETTER_AUTH_URL` and `NEXT_PUBLIC_APP_URL` must be `https://warehouse-system-app.vercel.app` (`https`, no trailing slash). Correct them in Vercel and redeploy. |
+| Sign-in fails on a preview deployment | Expected. Authentication is configured for the production URL; preview URLs are not the primary login address. Use `https://warehouse-system-app.vercel.app`. |
+| Errors about a missing table or column | The production migrations have not been applied to Neon. Apply them (see step 5). |
+| The AI assistant answers with an error | `GROQ_API_KEY` is missing or invalid in Vercel. Correct it and redeploy. |
+| Changed an environment variable but nothing happened | Environment variable changes only apply to new deployments. Redeploy the project. |
