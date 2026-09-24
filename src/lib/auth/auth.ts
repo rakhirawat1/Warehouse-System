@@ -16,6 +16,11 @@ export const auth = betterAuth({
       process.env.NODE_ENV === "development" ? "http" : "https",
   },
 
+  trustedOrigins: [
+    "http://localhost:3001",
+    "https://warehouse-system-1qxqkk06y-warehouse-system2.vercel.app",
+  ],
+
   database: drizzleAdapter(db, {
     provider: "pg",
   }),
