@@ -3,113 +3,137 @@
 ## Project Overview
 
 A web application for managing warehouses, the storage spaces inside them and
-the items they hold. It tracks capacity at warehouse and storage-space level,
-records where every unit is stored, and keeps a full history of stock
-movements, with separate permissions for administrators and staff.
+the items stored in them. It tracks capacity at both warehouse and
+storage-space level, records exactly where every unit is stored, and keeps a
+full history of stock movements. Two roles — **Admin** and **Staff** — get
+different levels of access.
 
 ## Live Demo
 
 **Live Application:** [https://warehouse-system-app.vercel.app](https://warehouse-system-app.vercel.app)
 
-The application is hosted on Vercel and uses a Neon PostgreSQL database in
-production.
+Hosted on Vercel, using a Neon PostgreSQL database in production.
+
+**Demo logins:**
+
+| Role | Email | Password |
+| --- | --- | --- |
+| Admin | `rakhi@gmail.com` | `rakhi@123` |
+| Staff | `jack@gmail.com` | `jack@123` |
+
 
 ## Tech Stack
 
 - **Next.js 16** (App Router) with **React 19** and **TypeScript**
 - **PostgreSQL 16** with **Drizzle ORM** (schema, migrations and integrity triggers)
-- **Better Auth** for email/password authentication and roles
-- **Zod** for validation
+- **Better Auth** for email/password authentication and role-based access
+- **Zod** for input validation
 - **Tailwind CSS 4**, **Framer Motion**, **Recharts** and **Lucide** icons
-- **Groq** for the AI features
+- **Groq** (LLM API) for the AI features
 - **pnpm** as the package manager
-- **Docker Compose** for local PostgreSQL and optional full application containerization
-- **Vercel** for hosting and **Neon** for the production database
+- **Docker Compose** for the local database, and optionally the whole app
+- **Vercel** for hosting, **Neon** for the production database
 
-## Features
+## Architecture at a Glance
 
-- **Warehouses**: create, edit and delete warehouses with a name, location,
-  capacity and an active/inactive status.
-- **Storage spaces**: add spaces to a warehouse with a name, description,
+```
+Browser  →  Next.js (App Router, server actions + API routes)  →  PostgreSQL
+```
+
+- The UI is server-rendered with Next.js; most actions (create, allocate,
+  move, dispatch) are **server actions** rather than a separate REST API.
+- **Drizzle ORM** defines the schema and generates SQL migrations.
+- Business rules (capacity limits, storage-type compatibility, allocation
+  limits) are checked **twice**: once in the application layer, and again by
+  **PostgreSQL triggers**, so the database can never end up in an invalid
+  state even if a bug slips past the application checks.
+- **Better Auth** handles sessions and roles; every server action and page
+  re-checks the caller's role on the server, not just in the UI.
+
+The app can run in three environments — local development, local Docker, and
+Vercel/Neon production — see [Setup](#setup) and
+[How the database connection works](#how-the-database-connection-works)
+below.
+
+## Key Features
+
+- **Warehouses** — create, edit and delete warehouses with a name, location,
+  capacity and an Active/Inactive status. A warehouse can't be deleted while
+  it holds stock; set it Inactive instead.
+- **Storage spaces** — add spaces to a warehouse with a name, description,
   storage type (Normal, Cold storage, Secure, Hazardous) and capacity.
-- **Items**: manage items with a name, unique SKU, description, total quantity
-  and required storage type.
-- **Allocation and split allocation**: place an item's units into one or more
-  storage spaces in a single submission; move, correct and dispatch stock.
-- **Capacity tracking**: used and available capacity for every warehouse and
-  storage space, with alerts for nearly full spaces.
-- **Authentication and roles**: email/password sign-in with Admin and Staff
-  roles. There is no public sign-up; administrators create staff accounts with
-  a temporary password that must be changed at first sign-in. The initial
-  administrator was created during the production database setup.
-- **Activity log**: every allocation, move, correction and dispatch, with
-  filters by type, warehouse, item, person and date.
-- **Dashboard**: key figures, capacity charts, items by allocation status and
-  recent activity.
-- **AI features**: a read-only assistant that answers questions about the live
-  data, AI suggestions when adding items and storage spaces, and an AI
-  warehouse health report.
-- **CSV export** of the inventory as filtered on the Items page.
+- **Items** — manage items with a name, unique SKU, description, total
+  quantity owned, and the storage type they require.
+- **Allocation & split allocation** — place an item's units into one or more
+  storage spaces in a single submission, then move, correct (adjust) or
+  dispatch stock afterwards.
+- **Capacity tracking** — live used/available capacity for every warehouse
+  and storage space, with alerts when a space is nearly full.
+- **Activity log** — every receipt, move, correction and dispatch, filterable
+  by warehouse, item, person and date range, plus a per-type summary.
+- **Dashboard** — key figures, capacity charts, items-by-allocation-status
+  chart, nearly-full alerts and recent activity.
+- **AI features** (see below) — a read-only data assistant, AI-suggested form
+  values, and an AI warehouse health summary.
+- **CSV export** of the inventory, respecting the filters set on the Items page.
 - **Light and dark themes.**
 
-## Setup
+## Authentication & Roles (RBAC)
 
-The project supports both standard local development and full Docker
-execution. Docker is provided for reproducible local execution and PostgreSQL,
-and the project can also run the complete application inside Docker. Docker is
-not mandatory: Next.js can run directly with Node.js and pnpm, and PostgreSQL
-can run in Docker Compose or come from your own installation.
+RBAC (Role-Based Access Control) means each signed-in user can only do what
+their role allows. This project has two roles:
 
-| | Standard local development | Full Docker |
+| Action | Admin | Staff |
 | --- | --- | --- |
-| On the host | Node.js + pnpm + Next.js | Docker only |
-| In Docker | PostgreSQL | Next.js + PostgreSQL |
-| PostgreSQL address used by Next.js | `localhost:5434` | `db:5432` |
-| Application | http://localhost:3001 | http://localhost:3001 |
+| View warehouses, storage spaces, items and activity | Yes | Yes |
+| Create and edit warehouses, storage spaces and items | Yes | Yes |
+| Receive, move, adjust and dispatch stock | Yes | Yes |
+| Delete warehouses, storage spaces and items | Yes | No |
+| Manage users and roles | Yes | No |
 
-**Standard local development** (Next.js on the host, PostgreSQL in Docker):
+Every rule above is enforced **on the server** for every action; the
+interface only hides buttons a role can't use, as a convenience.
 
-```bash
-docker compose up -d
-pnpm install
-pnpm db:migrate
-pnpm create-admin
-pnpm dev
-```
+**How accounts work:**
 
-The host-side `DATABASE_URL` points at the port Docker exposes:
-`postgresql://postgres:postgres@localhost:5434/warehouse_management`.
+1. There is **no public sign-up**. The first administrator is created once,
+   from the command line, when the project is first set up (see
+   [SETUP.md](./SETUP.md)).
+2. An administrator signs in and creates staff accounts from the **Users**
+   page, generating a temporary password for each one.
+3. The new user signs in with that temporary password and is required to set
+   their own password before they can use the rest of the app.
 
-**Full Docker** (Next.js and PostgreSQL both in Docker):
+## AI Features
 
-```bash
-docker compose up -d
-docker compose run --rm migration
-docker compose run --rm admin
-```
+The AI features use the **Groq** API and are entirely optional — the app
+works normally if `GROQ_API_KEY` is left blank, except for these three
+features:
 
-`docker compose up -d` does not run migrations, create an administrator or
-load demo data; each of those is a separate command. Inside Docker the
-application reaches PostgreSQL through the service name `db` on the internal
-port: `postgresql://postgres:postgres@db:5432/warehouse_management`. `db:5432`
-works only between Docker containers; `localhost:5434` is for Next.js running
-directly on the host.
+- **AI assistant** — a read-only chat assistant that can answer questions
+  about the live data (e.g. "which items still need to be allocated?",
+  "which storage spaces are nearly full?"). It can only look data up; it
+  cannot create, edit or delete anything.
+- **AI form suggestions** — when adding an item or a storage space, the AI
+  can suggest reasonable field values (e.g. a description or storage type)
+  based on what you've typed so far. Suggestions are only ever saved if you
+  accept them through the normal form.
+- **AI warehouse health summary** — a short, generated summary of overall
+  warehouse status (capacity pressure, unallocated stock, etc.) shown on the
+  dashboard.
 
-**Optional demo data and clearing.** Demo data is never created automatically.
+## Main Modules
 
-| | Standard local development | Full Docker |
-| --- | --- | --- |
-| Load demo data | `pnpm db:seed` | `docker compose run --rm seed` |
-| Clear inventory data | `pnpm db:clear` | `docker compose run --rm clear` |
-
-Seeding replaces all inventory data (warehouses, storage spaces, items,
-allocations and movement history). Clearing deletes the same data without
-loading anything. User accounts are kept in both cases. Use them only on a
-local or test database.
-
-For prerequisites, environment variables, database setup, migrations,
-administrator creation, optional seed data, and detailed run instructions, see
-[SETUP.md](./SETUP.md).
+| Page | Purpose |
+| --- | --- |
+| Dashboard | Key figures, charts, nearly-full alerts, recent activity |
+| Warehouses | Manage warehouses and their status |
+| Storage Spaces | Manage spaces inside a warehouse |
+| Items | Manage items, their SKU and required storage type; CSV export |
+| Allocations | Allocate, move, adjust and dispatch stock |
+| Activity | Full, filterable stock-movement history |
+| Users | Admin-only: create staff accounts and manage roles |
+| Settings | Change your own password |
 
 ## Data Model
 
@@ -120,28 +144,26 @@ Warehouse ──< Storage Space ──< Allocation >── Item
 - A **warehouse** contains many **storage spaces**.
 - An **item** records the total quantity the business owns.
 - An **allocation** stores how many units of one item sit in one storage
-  space. There is at most one allocation per item and storage space.
-- **Split storage**: one item can have allocations in several storage spaces,
-  in the same or different warehouses. Units not yet allocated are shown as
-  remaining (`remaining = total - allocated`).
-- Every stock change is written to **stock movements**, an append-only history
-  that stays readable after records are deleted.
+  space (at most one allocation per item/space pair).
+- **Split storage**: one item can have allocations across several storage
+  spaces, in the same or different warehouses. Units not yet placed anywhere
+  show as remaining (`remaining = total − allocated`).
+- Every stock change is written to an append-only **stock movements** table,
+  which stays readable even after the item or space it refers to is deleted.
 
 ## Key Business Rules
 
-- A **warehouse cannot be deleted while it holds stock**; it can be set to
-  inactive instead. Inactive warehouses receive no new stock or storage spaces.
-- A **storage space cannot exceed its capacity**, and the capacity of all
-  storage spaces cannot exceed the warehouse's capacity.
+- A storage space can never exceed its own capacity, and the storage spaces
+  in a warehouse can never exceed the warehouse's capacity.
 - Capacity can never be reduced below what is already stored or assigned.
-- **Allocation** can never exceed the item's unallocated units, and an item's
-  total cannot drop below what is already allocated.
-- **Split allocation** across several spaces is all or nothing: every line is
-  validated before anything is saved. Concurrent requests are protected by row
-  locks.
-- **SKUs are unique** (ignoring case). Storage-space names are unique within a
+- An allocation can never exceed an item's unallocated units, and an item's
+  total can't drop below what's already allocated.
+- A split allocation across several spaces is all-or-nothing: every line is
+  validated before anything is saved, and concurrent requests are protected
+  by database row locks.
+- SKUs are unique (ignoring case); storage-space names are unique within a
   warehouse.
-- **Storage-type compatibility**:
+- **Storage-type compatibility:**
 
   | Item needs | Can be stored in |
   | --- | --- |
@@ -150,172 +172,71 @@ Warehouse ──< Storage Space ──< Allocation >── Item
   | Secure | Secure only |
   | Hazardous | Hazardous only |
 
-- Storage spaces holding stock, and items with units allocated to storage
-  spaces, cannot be deleted.
+- A storage space holding stock, or an item with units allocated, cannot be
+  deleted.
 
-Capacity, compatibility and quantity rules are enforced in the application and
-again by PostgreSQL triggers.
+These rules are enforced in the application code **and** by PostgreSQL
+triggers, so they hold even under concurrent use.
 
-## Roles
+## Setup
 
-| Action | Admin | Staff |
+Full, step-by-step instructions (for Windows, macOS and Linux) are in
+[SETUP.md](./SETUP.md). In short:
+
+```bash
+pnpm install
+cp .env.example .env       # then fill in the values, see SETUP.md
+docker compose up -d db    # start PostgreSQL
+pnpm db:migrate             # create the tables
+pnpm create-admin           # create the first admin account
+pnpm dev                    # start the app on http://localhost:3001
+```
+
+An optional **Full Docker** mode (Next.js and PostgreSQL both in containers)
+and optional demo data are also covered in [SETUP.md](./SETUP.md).
+
+## How the Database Connection Works
+
+The app can connect to two different local addresses for the same
+PostgreSQL container, depending on where Next.js itself is running:
+
+| Where Next.js runs | Database address | When it's used |
 | --- | --- | --- |
-| View warehouses, storage spaces, items and activity | Yes | Yes |
-| Create and edit warehouses, storage spaces and items | Yes | Yes |
-| Allocate, move, correct and dispatch stock | Yes | Yes |
-| Delete warehouses, storage spaces and items | Yes | No |
-| Manage users and roles | Yes | No |
+| On your computer (`pnpm dev`) | `localhost:5434` | Standard local development |
+| Inside Docker | `db:5432` | Full Docker mode only |
 
-Permissions are enforced on the server; the interface also hides actions a
-role cannot use.
+`db:5432` is a Docker-internal address that only works from one container to
+another — it will never work from your computer's browser or terminal. Your
+local `.env` file should always use `localhost:5434`.
 
-## Assignment Notes
+In production, neither address is used: Vercel connects to a separate Neon
+PostgreSQL database using a `DATABASE_URL` configured in the Vercel project,
+not in any local file.
 
-Beyond the core requirements, the project also implements:
+## Deployment (Production)
 
-- Activity log of all stock movements, with filters
-- Dashboard with capacity and allocation charts, and nearly-full alerts
-- Move, quantity correction and dispatch operations
-- Warehouse active/inactive status
-- Forced password change for new accounts
-- AI assistant, AI form suggestions and AI health report
-- CSV inventory export
-- Database-level integrity triggers and row locking for concurrent requests
+The live app is deployed on **Vercel**, connected to a **Neon** PostgreSQL
+database, with environment variables (`DATABASE_URL`, `BETTER_AUTH_SECRET`,
+`BETTER_AUTH_URL`, `NEXT_PUBLIC_APP_URL`, `GROQ_API_KEY`) configured in the
+Vercel project rather than committed to the repository.
 
-## Environments
+A couple of things worth knowing:
 
-The project runs in three separate environments:
+- Vercel **does not** run database migrations automatically. After a schema
+  change, migrations must be applied to Neon manually
+  (`pnpm db:migrate` with `DATABASE_URL` pointed at Neon).
+- The first administrator account on a fresh database is also created
+  manually (`pnpm create-admin`), the same way as in local setup, since
+  there is no public sign-up.
 
-```
-Local development:  Node.js + pnpm  →  Next.js  →  Docker PostgreSQL  (localhost:5434)
-Full Docker:        Docker          →  Next.js  →  Docker PostgreSQL  (db:5432)
-Production:         Vercel          →  Next.js  →  Neon PostgreSQL
-```
+This is provided for context; it is **not** something an evaluator needs to
+do — the live link above already points at a working deployment.
 
-- Next.js running directly on the host connects to Docker PostgreSQL through
-  `localhost:5434`.
-- Next.js running inside Docker connects to PostgreSQL through `db:5432`,
-  which is valid only between Docker containers.
-- Production runs on Vercel with Neon PostgreSQL. It does not use the local
-  Docker setup.
-- Local Docker PostgreSQL and production Neon PostgreSQL are completely
-  separate databases.
+## Important Notes
 
-The local `.env` file is used only for local development and never contains
-production credentials. Production environment variables are configured in
-Vercel, so production credentials are never committed to the repository.
-
-## Deployment
-
-The application is deployed on Vercel with Neon PostgreSQL as the production
-database.
-
-### 1. Push the project to GitHub
-
-Push the application source code to a GitHub repository.
-
-### 2. Create and connect the Vercel project
-
-Import the GitHub repository into Vercel and configure the project as a
-Next.js application.
-
-### 3. Connect Neon PostgreSQL
-
-Connect a Neon PostgreSQL database to the Vercel project using the Neon
-integration. Vercel provides the production `DATABASE_URL` through the
-project's environment configuration.
-
-### 4. Configure production environment variables
-
-Add the required production variables in Vercel (**Settings** →
-**Environment Variables**):
-
-| Name | Value |
-| --- | --- |
-| `DATABASE_URL` | Provided by the Neon integration |
-| `BETTER_AUTH_SECRET` | A private random string, set in Vercel only |
-| `BETTER_AUTH_URL` | `https://warehouse-system-app.vercel.app` |
-| `NEXT_PUBLIC_APP_URL` | `https://warehouse-system-app.vercel.app` |
-| `GROQ_API_KEY` | Groq API key for the AI features, set in Vercel only |
-
-Secret values are never stored in the repository or shown in this document.
-
-### 5. Prepare the production database
-
-This is a one-time preparation of the production Neon database. It has two
-separate operations: applying the migrations, then creating the initial
-administrator. Both must run against the Neon database, not the local Docker
-database, and a Vercel deployment performs neither of them.
-
-**Apply the Drizzle migrations.** Run the migration with `DATABASE_URL` set to
-the production Neon connection string:
-
-```bash
-pnpm db:migrate
-```
-
-**Create the initial administrator.** This is a separate step. The application
-has no public sign-up and the migrated database contains no account, so create
-the administrator once:
-
-```bash
-pnpm create-admin
-```
-
-It prompts for the email, password and name, and reads the same
-`DATABASE_URL`, so it must also point at the Neon database. Do not store the
-credentials in the repository.
-
-To target Neon without editing the local `.env`, set `DATABASE_URL` to the Neon
-connection string only for that terminal session; a variable that is already
-set takes precedence over `.env`. The local `.env` stays unchanged for local
-development. The Docker service commands (`migration`, `admin`, `seed`,
-`clear`) are for local Docker only and are not used for production.
-
-> **Database schema changes:** Vercel deploys code changes automatically, but
-> it does not run Drizzle migrations. When the database schema changes,
-> generate a new Drizzle migration and apply it to the production Neon
-> database before using the updated schema in production.
-
-Optionally, demo inventory data can be loaded with:
-
-```bash
-pnpm db:seed
-```
-
-This loads demo warehouses, storage spaces and items. It is optional, is never
-run automatically, and needs an administrator to exist already. It replaces
-all existing inventory data (warehouses, storage spaces, items, allocations
-and movement history), so it must not be run against a production database
-that holds real data.
-
-### 6. Deploy
-
-Deploy or redeploy the Vercel project so it uses the configured environment
-variables, then verify the live application at
-[https://warehouse-system-app.vercel.app](https://warehouse-system-app.vercel.app).
-
-### 7. Future deployments
-
-After the initial deployment, every change pushed to the `main` branch
-automatically triggers a new Vercel deployment.
-
-### Troubleshooting
-
-**Production (Vercel)**
-
-| Problem | Fix |
-| --- | --- |
-| Signing in fails, or it keeps returning to the login page | `BETTER_AUTH_URL` and `NEXT_PUBLIC_APP_URL` must be `https://warehouse-system-app.vercel.app` (`https`, no trailing slash). Correct them in Vercel and redeploy. |
-| There is no account to sign in with | The migrated database contains no accounts. Create the initial administrator (see step 5). |
-| Errors about a missing table or column | The production migrations have not been applied to Neon. Apply them (see step 5). |
-| The AI assistant answers with an error | `GROQ_API_KEY` is missing or invalid in Vercel. Correct it and redeploy. |
-| Changed an environment variable but nothing happened | Environment variable changes only apply to new deployments. Redeploy the project. |
-
-**Local**
-
-| Problem | Fix |
-| --- | --- |
-| Signing in fails locally | `BETTER_AUTH_URL` and `NEXT_PUBLIC_APP_URL` in `.env` must match the address in the browser, `http://localhost:3001`, port included. |
-| The application cannot reach the database | Next.js on the host uses `localhost:5434`; Next.js inside Docker uses `db:5432`. PostgreSQL must be running first (`docker compose up -d`). |
-| Errors about a missing table or column | The migrations have not been applied. Run `pnpm db:migrate`, or `docker compose run --rm migration` in full Docker. |
+- Local Docker PostgreSQL and production Neon PostgreSQL are **completely
+  separate databases** — nothing you do locally affects the live demo.
+- `.env` is never committed (it's in `.gitignore`) and should never contain
+  production credentials.
+- The AI features require a Groq API key; without one, the rest of the app
+  still works normally.

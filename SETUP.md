@@ -1,17 +1,32 @@
-# Setup manual
+# Setup Manual
 
 How to run the Warehouse Management System locally on **Windows, macOS or
-Linux**. Follow it top to bottom.
+Linux**.
 
-Steps 1–9 describe **standard local development**: Next.js runs on your
-computer with pnpm, and only the database runs in Docker. To run everything
-in Docker instead, see the [Full Docker option](#full-docker-option) after
-step 9.
+> This manual is for running the project **locally**. The live deployment
+> uses Vercel and a Neon PostgreSQL database, which is completely separate
+> from the local database you create here. Never put production credentials
+> in your local `.env`.
 
-> This manual is for running the project **locally**. The live deployment uses
-> Vercel and a Neon PostgreSQL database, which is completely separate from the
-> local database you create here. Never put production credentials in your
-> local `.env`.
+---
+
+## Recommended Setup Path
+
+This is the fastest way to get the project running. Next.js runs directly on
+your computer; only PostgreSQL runs in Docker.
+
+1. Install **Node.js**, **pnpm** and **Docker** (see [What you need](#1-what-you-need)).
+2. Open the project folder in a terminal and run `pnpm install`.
+3. Create `.env` from `.env.example` and fill it in.
+4. Start PostgreSQL: `docker compose up -d db`
+5. Create the tables: `pnpm db:migrate`
+6. Create the first admin account: `pnpm create-admin`
+7. Start the app: `pnpm dev`
+8. Open **http://localhost:3001** and sign in.
+
+The detailed steps below (1–8) walk through exactly this, with explanations
+and troubleshooting. If you'd rather run everything — app included — inside
+Docker, skip to [Full Docker option](#full-docker-option) instead.
 
 ---
 
@@ -19,10 +34,10 @@ step 9.
 
 | Tool | Version | Check with | Get it |
 | --- | --- | --- | --- |
-| **Node.js** | **22.x (22.13 or newer)** | `node -v` | <https://nodejs.org> |
+| **Node.js** | 22.x | `node -v` | <https://nodejs.org> |
 | **pnpm** | 11.17.0 | `pnpm -v` | `corepack enable` (ships with Node) |
-| **Docker** | any current | `docker -v` | <https://docs.docker.com/get-started/> |
-| **Groq API key** | — | — | <https://console.groq.com/keys> (only for the AI assistant) |
+| **Docker** | any current version | `docker -v` | <https://docs.docker.com/get-started/> |
+| **Groq API key** (optional) | — | — | <https://console.groq.com/keys> — only needed for the AI features |
 
 Activate pnpm:
 
@@ -31,10 +46,9 @@ corepack enable
 corepack prepare pnpm@11.17.0 --activate
 ```
 
-In standard local development Docker runs **only PostgreSQL**. If you already
-have PostgreSQL 16, see [Using your own PostgreSQL](#using-your-own-postgresql).
-The [Full Docker option](#full-docker-option) needs only Docker, because
-Node.js and pnpm are provided inside the Docker image.
+In standard local development, Docker runs **only PostgreSQL** — not the
+app. If you already have PostgreSQL 16 installed, see
+[Using your own PostgreSQL](#using-your-own-postgresql) instead of Docker.
 
 ---
 
@@ -46,7 +60,8 @@ Open the downloaded or cloned project folder in a terminal, then run:
 pnpm install
 ```
 
-(Not needed for the Full Docker option.)
+(Not needed for the [Full Docker option](#full-docker-option) — dependencies
+are installed inside the Docker image instead.)
 
 ---
 
@@ -63,11 +78,11 @@ Copy-Item .env.example .env
 Then edit `.env`:
 
 ```ini
-DATABASE_URL=postgresql://postgres:postgres@localhost:5434/warehouse_management
+DATABASE_URL=postgres://postgres:postgres@localhost:5434/warehouse_management
 BETTER_AUTH_SECRET=<a long random string>
 BETTER_AUTH_URL=http://localhost:3001
 NEXT_PUBLIC_APP_URL=http://localhost:3001
-GROQ_API_KEY=<your Groq API key>
+GROQ_API_KEY=<your Groq API key, optional>
 ```
 
 Generate `BETTER_AUTH_SECRET`:
@@ -80,51 +95,18 @@ openssl rand -base64 32
 [Convert]::ToBase64String((1..32 | ForEach-Object { Get-Random -Max 256 }))
 ```
 
-> `BETTER_AUTH_URL` must match the address in your browser, port included.
-> The app runs on port 3001.
+> `BETTER_AUTH_URL` and `NEXT_PUBLIC_APP_URL` must match the address in your
+> browser, port included — the app runs on port **3001**.
 
-> **Two database addresses, do not mix them up.**
-> `localhost:5434` is the address when Next.js runs **on your computer**, and
-> it is what belongs in `.env`. `db:5432` works **only between Docker
-> containers**, when Next.js itself runs inside Docker. Never put the `db:5432`
-> address in your `.env`.
+> **Two database addresses — don't mix them up.**
+> `localhost:5434` is the address to use when Next.js runs **on your
+> computer**, and it's what belongs in `.env` for standard local
+> development. `db:5432` only works **between Docker containers**, i.e. when
+> Next.js itself is also running inside Docker (see
+> [Full Docker option](#full-docker-option)). Never put `db:5432` in your
+> local `.env`.
 
-Never commit `.env`; it is already in `.gitignore`.
-
----
-
-## Choose your local run mode
-
-Choose **one** mode. Do not run both, because both serve the app on port 3001.
-
-**Standard local development** (steps 4–8 below):
-
-```
-Browser → Next.js on your computer (:3001) → PostgreSQL in Docker (localhost:5434 → 5432)
-```
-
-```bash
-docker compose up -d db
-pnpm db:migrate
-pnpm create-admin
-pnpm dev
-```
-
-**Full Docker** (see [Full Docker option](#full-docker-option)):
-
-```
-Browser → Next.js in Docker (:3001) → PostgreSQL in Docker (db:5432)
-```
-
-```bash
-docker compose up -d
-docker compose run --rm migration
-docker compose run --rm admin
-```
-
-> **Standard local development: never run `docker compose up -d` without `db`.**
-> That command also starts the Dockerized app on port 3001, and `pnpm dev`
-> then fails with `EADDRINUSE: address already in use :::3001`.
+`.env` is already listed in `.gitignore` and is never committed.
 
 ---
 
@@ -134,14 +116,15 @@ docker compose run --rm admin
 docker compose up -d db
 ```
 
-Docker starts only PostgreSQL 16 on **port 5434** with a database called
-`warehouse_management`. The data is stored in a named Docker volume, so it
-survives restarts.
+This starts **only** PostgreSQL 16, on port **5434**, with a database called
+`warehouse_management`. Its data is kept in a Docker volume, so it survives
+restarts. `pnpm db:up` does exactly the same thing and can be used instead.
 
-> Use `docker compose up -d db`, **not** `docker compose up -d` and not
-> `pnpm db:up`. Both of those start the whole Docker stack, including the
-> Dockerized app on port 3001. If that already happened, run
-> `docker compose down` (your data is kept), then `docker compose up -d db`.
+> **Don't run plain `docker compose up -d` (without `db`) here.** That
+> starts the whole stack, including a Dockerized copy of the app on port
+> 3001, which will clash with `pnpm dev` (`EADDRINUSE: address already in
+> use :::3001`). If that happens, run `docker compose down` (your data is
+> kept) and start again with `docker compose up -d db`.
 
 ---
 
@@ -152,39 +135,41 @@ pnpm db:migrate
 ```
 
 This creates the tables, constraints, unique indexes and integrity triggers.
-The database starts empty: there is no demo data and no built-in account.
+The database starts empty: no demo data and no accounts yet.
 
 ---
 
 ## 6. Create the first administrator
 
-The app has **no public sign-up**. Create the first administrator once:
+The app has **no public sign-up**, so the first administrator is created
+from the command line, once:
 
 ```bash
 pnpm create-admin
 ```
 
-Enter the email, password and name when prompted. `.env` must be filled in
-first.
+It will prompt for an email, password and name. `.env` must already be
+filled in (step 3), since this command connects to the database using
+`DATABASE_URL`.
 
 ---
 
 ## 7. Load demo data (optional)
 
-> **Warning:** `pnpm db:seed` **replaces all inventory data** (warehouses,
-> storage spaces, items, allocations and movement history). Use it only on a
-> local or test database, **never on a database that holds real or production
-> data.**
+> **Warning:** `pnpm db:seed` **replaces all inventory data** — warehouses,
+> storage spaces, items, allocations and movement history. Only run it on a
+> local or test database, **never on a database holding real data.**
 
 ```bash
 pnpm db:seed
 ```
 
-Loads 3 active warehouses, 9 storage spaces and 10 items. Accounts are never
-changed, and it stops with a message if no administrator exists yet. Demo data
-is optional and is **never loaded automatically**.
+This creates 3 sample warehouses, 9 storage spaces and 10 items so there's
+something to look at immediately. It never touches user accounts, and it
+refuses to run if no administrator exists yet. Seeding is entirely optional
+and is never run automatically.
 
-To empty the inventory without loading demo data, run `pnpm db:clear`.
+To empty the inventory again without loading demo data, run `pnpm db:clear`.
 
 ---
 
@@ -194,32 +179,36 @@ To empty the inventory without loading demo data, run `pnpm db:clear`.
 pnpm dev
 ```
 
-Open <http://localhost:3001> and sign in as the administrator.
+Open <http://localhost:3001> and sign in with the administrator account from
+step 6.
 
-For a production-style run: `pnpm build` then `pnpm start`.
+For a production-style run instead: `pnpm build` then `pnpm start`.
 
-If `pnpm dev` reports `EADDRINUSE ... :3001`, another server is already using
-the port: see the warning in step 4.
+If `pnpm dev` reports `EADDRINUSE ... :3001`, something else is already
+using that port — see the warning in step 4.
 
 ---
 
-## 9. Add staff
+## 9. Add a staff account
 
 1. Sign in as an administrator and open **Users**.
-2. **Add User**: enter the name, email and role, then click **Generate** to
-   create a temporary password.
-3. Give the person their email and temporary password. An administrator can
-   view it again under **View details** until it is changed.
-4. On first sign-in, the person must set their own password before using the
-   app.
+2. Click **Add User**, enter the name, email and role, then click
+   **Generate** to create a temporary password.
+3. Share the email and temporary password with that person. As an admin, you
+   can view it again under **View details** until they change it.
+4. On first sign-in, that person must set their own password before they can
+   use the rest of the app.
 
 ---
 
 ## Full Docker option
 
-Use this if you would rather not install Node.js and pnpm. Next.js and
-PostgreSQL both run in Docker. Make sure `pnpm dev` is not running, and keep
-`.env` as in step 3 (with `localhost:5434`; do not change it to `db:5432`).
+Use this if you'd rather not install Node.js and pnpm at all — Next.js and
+PostgreSQL both run inside Docker, and only Docker itself is required (the
+image already contains Node.js and pnpm).
+
+Make sure `pnpm dev` isn't running, and keep `.env` as created in step 3
+(with `localhost:5434` — you do not need to change it).
 
 ```bash
 docker compose up -d
@@ -229,71 +218,66 @@ docker compose run --rm admin
 
 Then open <http://localhost:3001>.
 
-- `docker compose up -d` only starts the containers. It does **not** create the
-  tables, the administrator or any demo data; those are the separate
-  `migration`, `admin` and (optional) `seed` commands.
-- `docker compose run --rm admin` asks for the email, password and name, like
-  `pnpm create-admin`.
-- Inside Docker the app connects to PostgreSQL at
-  `postgresql://postgres:postgres@db:5432/warehouse_management`. Your computer
-  does **not** use `db:5432`; from your computer the database is
+- `docker compose up -d` starts the containers but does **not** create the
+  tables, the administrator, or any demo data — those are the separate
+  `migration`, `admin` and (optional) `seed` commands below.
+- `docker compose run --rm admin` asks for an email, password and name, same
+  as `pnpm create-admin`.
+- Inside Docker, the app reaches PostgreSQL at
+  `postgresql://postgres:postgres@db:5432/warehouse_management`. That
+  address only works between containers — from your own computer, the same
+  database is at
   `postgresql://postgres:postgres@localhost:5434/warehouse_management`.
 
-Optional demo data, never loaded automatically (same warning as step 7):
+Optional demo data (same warning as step 7 — never use on real data):
 
 ```bash
-docker compose run --rm seed
-docker compose run --rm clear
+docker compose run --rm seed    # loads demo data
+docker compose run --rm clear   # empties the inventory
 ```
-
-`seed` loads the demo data; `clear` empties the inventory without loading demo
-data.
 
 ---
 
-## Every command
+## Command reference
 
 | Command | What it does |
 | --- | --- |
 | `pnpm install` | Installs dependencies |
-| `docker compose up -d db` | Starts **only** PostgreSQL in Docker (port 5434). Use this for standard local development |
-| `pnpm db:up` | Runs `docker compose up -d`, which starts the **whole** Docker stack (database and app). Use it only for Full Docker, not with `pnpm dev` |
-| `pnpm db:migrate` | Applies migrations |
-| `pnpm create-admin` | Creates the first administrator |
+| `docker compose up -d db` (or `pnpm db:up`) | Starts **only** PostgreSQL in Docker, on port 5434 |
+| `pnpm db:migrate` | Applies database migrations |
+| `pnpm create-admin` | Creates the first administrator account |
 | `pnpm db:seed` | Replaces all inventory with demo data; accounts untouched |
 | `pnpm db:clear` | Deletes all inventory data; accounts untouched |
-| `pnpm dev` | Development server on <http://localhost:3001> |
-| `pnpm build` / `pnpm start` | Production build and server on port 3001 |
-| `pnpm typecheck` | TypeScript check |
-| `pnpm lint` | ESLint |
-| `pnpm db:studio` | Drizzle Studio, a browser UI for the database |
-| `pnpm db:generate` | Generates a migration after changing `src/db/schema` |
-| `docker compose up -d` | Full Docker: starts the app and the database |
-| `docker compose run --rm migration` | Full Docker: applies migrations |
-| `docker compose run --rm admin` | Full Docker: creates the first administrator |
-| `docker compose run --rm seed` | Full Docker: replaces all inventory with demo data (optional) |
-| `docker compose run --rm clear` | Full Docker: deletes all inventory data |
+| `pnpm dev` | Starts the dev server on <http://localhost:3001> |
+| `pnpm build` / `pnpm start` | Production build and server, port 3001 |
+| `pnpm typecheck` | Runs the TypeScript compiler check |
+| `pnpm lint` | Runs ESLint |
+| `pnpm db:studio` | Opens Drizzle Studio, a browser UI for the database |
+| `pnpm db:generate` | Generates a new migration after a schema change |
+| `docker compose up -d` | **Full Docker only** — starts the app and the database together |
+| `docker compose run --rm migration` | **Full Docker only** — applies migrations |
+| `docker compose run --rm admin` | **Full Docker only** — creates the first administrator |
+| `docker compose run --rm seed` | **Full Docker only** — loads demo data (optional) |
+| `docker compose run --rm clear` | **Full Docker only** — deletes all inventory data |
 | `docker compose down` | Stops the containers, keeping the data |
-| `docker compose down -v` | Stops them and **deletes** the data |
+| `docker compose down -v` | Stops the containers and **deletes** the data |
 
-> **`docker compose down -v` deletes the local PostgreSQL Docker volume**, so
-> all local data is lost, including the administrator account. Use it only when
-> you intentionally want to reset the local database, then repeat the migration
-> and administrator steps.
+> **`docker compose down -v` deletes the local PostgreSQL volume**,
+> including the administrator account. Only use it when you intentionally
+> want to reset the local database — you'll need to repeat the migration and
+> administrator steps afterwards.
 
 ---
 
 ## Using your own PostgreSQL
 
-This is for standard local development.
+If you'd rather not use Docker for the database at all:
 
 1. Create an empty database: `CREATE DATABASE warehouse_management;`
-2. Point `DATABASE_URL` in `.env` at it. If PostgreSQL is installed directly on
-   your computer, use `localhost` and its port (usually 5432), for example
-   `postgresql://myuser:mypassword@localhost:5432/warehouse_management`. The
-   Docker address `db:5432` does not work from your computer.
-3. Skip the Docker database (`docker compose up -d db`); run
-   `pnpm db:migrate`, then create the first administrator (step 6), then
-   `pnpm dev`.
+2. Point `DATABASE_URL` in `.env` at it — for a local install this is
+   usually `postgresql://myuser:mypassword@localhost:5432/warehouse_management`.
+   (The Docker-only address `db:5432` does not apply here.)
+3. Skip step 4 (`docker compose up -d db`) and continue from step 5
+   (`pnpm db:migrate`).
 
-PostgreSQL 13 or newer works; no extensions are needed.
+PostgreSQL 13 or newer works; no extensions are required.
