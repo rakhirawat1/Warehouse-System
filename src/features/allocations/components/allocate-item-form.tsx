@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { Plus, Trash2, TriangleAlert } from "lucide-react";
 
@@ -107,6 +107,7 @@ export default function AllocateItemForm({
 
   function removeLine(key: string) {
     setError(null);
+
     setLines((current) =>
       current.filter((line) => line.key !== key),
     );
@@ -159,7 +160,13 @@ export default function AllocateItemForm({
     !duplicateSpace &&
     plannedTotal > 0;
 
-  async function handleSubmit() {
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    if (!canSubmit) {
+      return;
+    }
+
     setPending(true);
     setError(null);
 
@@ -210,57 +217,9 @@ export default function AllocateItemForm({
   }
 
   return (
-    <div className="grid gap-6 lg:grid-cols-[280px_1fr]">
-      <div className="space-y-5">
-        <div className="rounded-xl border border-border bg-surface p-5 shadow-card">
-          <Label htmlFor="planned">Quantity to allocate</Label>
-
-          <Input
-            id="planned"
-            type="number"
-            value={plannedTotal || ""}
-            readOnly
-            className="bg-surface-subtle font-semibold"
-          />
-
-          <FieldHint error={overRemaining}>
-            {overRemaining
-              ? `That is ${plannedTotal - item.remaining} more than the ${item.remaining} units left.`
-              : `Maximum: ${item.remaining} units. This is the sum of the lines on the right.`}
-          </FieldHint>
-
-          <div className="mt-4">
-            <Progress
-              value={item.allocated + plannedTotal}
-              max={item.quantity}
-              warnWhenFull={false}
-            />
-
-            <p className="mt-2 text-xs text-muted">
-              {item.allocated + plannedTotal} of {item.quantity} units would
-              be allocated.
-            </p>
-          </div>
-        </div>
-
-        <div className="rounded-xl border border-border bg-surface p-5 shadow-card">
-          <Label htmlFor="note">Note (optional)</Label>
-
-          <Input
-            id="note"
-            type="text"
-            value={note}
-            onChange={(event) => setNote(event.target.value)}
-            placeholder="e.g. Delivery 4412"
-          />
-
-          <FieldHint>
-            Saved with every line, in the activity log.
-          </FieldHint>
-        </div>
-      </div>
-
+    <form onSubmit={handleSubmit}>
       <div className="rounded-xl border border-border bg-surface shadow-card">
+        {/* Header */}
         <div className="border-b border-border px-5 py-4">
           <h2 className="font-semibold text-primary">
             Select storage space(s)
@@ -272,6 +231,7 @@ export default function AllocateItemForm({
           </p>
         </div>
 
+        {/* Storage allocation table */}
         <div className="overflow-x-auto">
           <table className="w-full min-w-[640px] text-sm">
             <thead>
@@ -310,6 +270,7 @@ export default function AllocateItemForm({
                     key={line.key}
                     className="border-b border-border align-top last:border-0"
                   >
+                    {/* Warehouse */}
                     <td className="px-4 py-3">
                       <Select
                         aria-label="Warehouse"
@@ -332,6 +293,7 @@ export default function AllocateItemForm({
                       </Select>
                     </td>
 
+                    {/* Storage space */}
                     <td className="px-4 py-3">
                       <Select
                         aria-label="Storage space"
@@ -364,6 +326,7 @@ export default function AllocateItemForm({
                       </Select>
                     </td>
 
+                    {/* Available */}
                     <td className="px-4 py-3">
                       {selected ? (
                         <div className="w-28">
@@ -387,6 +350,7 @@ export default function AllocateItemForm({
                       )}
                     </td>
 
+                    {/* Quantity */}
                     <td className="px-4 py-3">
                       <Input
                         type="number"
@@ -415,6 +379,7 @@ export default function AllocateItemForm({
                       )}
                     </td>
 
+                    {/* Remove */}
                     <td className="px-4 py-3">
                       <button
                         type="button"
@@ -433,6 +398,7 @@ export default function AllocateItemForm({
           </table>
         </div>
 
+        {/* Add another location */}
         <div className="border-t border-border px-5 py-3">
           <Button
             type="button"
@@ -447,6 +413,7 @@ export default function AllocateItemForm({
           </Button>
         </div>
 
+        {/* Validation warning */}
         {(duplicateSpace || overRemaining) && (
           <div className="border-t border-border bg-warning-muted px-5 py-3">
             <p className="flex items-center gap-2 text-sm text-warning">
@@ -459,6 +426,7 @@ export default function AllocateItemForm({
           </div>
         )}
 
+        {/* Server error */}
         {error && (
           <div
             role="alert"
@@ -470,6 +438,24 @@ export default function AllocateItemForm({
           </div>
         )}
 
+        {/* Note - part of the same allocation form */}
+        <div className="border-t border-border px-5 py-4">
+          <Label htmlFor="note">Note (optional)</Label>
+
+          <Input
+            id="note"
+            type="text"
+            value={note}
+            onChange={(event) => setNote(event.target.value)}
+            placeholder="e.g. Delivery 4412"
+          />
+
+          <FieldHint>
+            Saved with this allocation in the activity log.
+          </FieldHint>
+        </div>
+
+        {/* Summary + actions */}
         <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border bg-surface-subtle px-5 py-4">
           <p className="text-sm text-muted">
             Allocating{" "}
@@ -493,15 +479,14 @@ export default function AllocateItemForm({
             </Button>
 
             <Button
-              type="button"
+              type="submit"
               disabled={!canSubmit}
-              onClick={handleSubmit}
             >
               {pending ? "Allocating..." : "Allocate"}
             </Button>
           </div>
         </div>
       </div>
-    </div>
+    </form>
   );
 }
